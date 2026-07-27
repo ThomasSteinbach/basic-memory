@@ -592,6 +592,18 @@ async def edit_note(
             section_ops = ("replace_section", "insert_before_section", "insert_after_section")
             if operation in section_ops and not section:
                 raise ValueError("section parameter is required for section-based operations")
+            # The mirror of the check above, and it matters more: `section` used to be
+            # accepted and silently DISCARDED by append/prepend/find_replace, placing the
+            # content at the end of the note while still reporting success. A missing
+            # argument fails loudly here; a superfluous one must too, or the only symptom
+            # is content in the wrong place — which is visible solely by re-reading the
+            # note, and notes are written far more often than they are re-read.
+            if operation not in section_ops and section:
+                raise ValueError(
+                    f"section parameter is not supported for the '{operation}' operation "
+                    f"— it applies to {', '.join(section_ops)}. Passing it here would be "
+                    f"ignored and the content placed at the end of the note."
+                )
             # Reject null metadata values before dispatch so both the edit path and the
             # append/prepend auto-create fallback behave identically — the service-side
             # guard only covers existing notes, and an auto-created note would otherwise

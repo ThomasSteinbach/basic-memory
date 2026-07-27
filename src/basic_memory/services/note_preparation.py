@@ -600,6 +600,13 @@ def _prepend_after_frontmatter(current_content: str, content: str) -> str:
     return content + ("\n" if content and not content.endswith("\n") else "") + current_content
 
 
+#: Operations that consume `section`. Every other operation ignores it, and passing it
+#: there is a caller error rather than a no-op — see the guard in `apply_edit_operation`.
+_SECTION_OPERATIONS = frozenset(
+    {"replace_section", "insert_before_section", "insert_after_section"}
+)
+
+
 def apply_edit_operation(
     current_content: str,
     operation: str,
@@ -609,6 +616,24 @@ def apply_edit_operation(
     expected_replacements: int = 1,
     replace_subsections: bool = True,
 ) -> str:
+    # `section` was previously accepted and silently discarded by append/prepend/
+    # find_replace: the content went to the END of the note and the call still reported
+    # success, so the caller got no signal at all. That is a worse failure than a refusal,
+    # because the only symptom is content in the wrong place — visible solely by
+    # re-reading the note, and notes are written far more often than they are
+    # structurally re-read.
+    #
+    # The check is deliberately the mirror of the "section is required for <op>" errors
+    # below: the same argument must fail when it is MISSING where it is needed and when it
+    # is PRESENT where it is ignored. Truthiness rather than `is not None` keeps callers
+    # that pass an empty string working, since only a non-empty section can express an
+    # intent that would be lost.
+    if section and operation not in _SECTION_OPERATIONS:
+        raise ValueError(
+            f"section is not supported for the '{operation}' operation — it applies to "
+            f"{', '.join(sorted(_SECTION_OPERATIONS))}. Passing it here would be ignored "
+            f"and the content placed at the end of the note."
+        )
     if operation == "append":
         return (
             current_content

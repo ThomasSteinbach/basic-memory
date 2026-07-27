@@ -1696,3 +1696,39 @@ async def test_edit_note_append_traversal_identifier_json_error(client, test_pro
     assert isinstance(result, dict)
     assert result["error"] == "SECURITY_VALIDATION_ERROR"
     assert result["fileCreated"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["append", "prepend", "find_replace"])
+async def test_edit_note_section_rejected_for_non_section_operations(
+    client, test_project, operation
+):
+    """`section` must be REJECTED, not silently ignored, by operations that do not use it.
+
+    Regression guard for a silent-failure class: `append`/`prepend` accepted a `section`
+    argument, ignored it completely, and placed the content at the END of the note while
+    reporting success. Callers had no signal at all — one knowledge base accumulated
+    stray blocks of up to 1290 lines past its final `## Relations` section before anyone
+    noticed, because the only symptom was content in the wrong place.
+
+    The validation is deliberately symmetric with the existing "section is required for
+    <op>" checks: the same parameter must be an error when absent where it is needed AND
+    when present where it is ignored. A parameter that is accepted and discarded is worse
+    than one that is refused.
+    """
+    await write_note(
+        project=test_project.name,
+        title="Test Note",
+        directory="test",
+        content="# Test\n\n## Section One\nContent here.",
+    )
+
+    with pytest.raises(ValueError, match="section parameter is not supported"):
+        await edit_note(
+            project=test_project.name,
+            identifier="test/test-note",
+            operation=operation,
+            content="new content",
+            section="## Section One",
+            **({"find_text": "Content here."} if operation == "find_replace" else {}),
+        )
