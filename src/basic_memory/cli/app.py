@@ -15,12 +15,41 @@ from basic_memory.config import init_cli_logging  # noqa: E402
 import logfire  # noqa: E402
 
 
+def installed_build_version() -> str | None:
+    """The installed distribution's version, or None if it differs in no useful way.
+
+    `__version__` is a release-managed literal (see `basic_memory/__init__.py`), so it
+    names the last RELEASE and not the build in use. For anything installed from a
+    branch, a fork or a source checkout, `uv-dynamic-versioning` produces a version that
+    carries the commit — `0.22.2.dev146+<sha>` — and that is the only string able to
+    answer "which build am I actually running?".
+
+    Returns None when the two agree, so a released install prints exactly what it always
+    printed.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    import basic_memory
+
+    try:
+        installed = version("basic-memory")
+    except PackageNotFoundError:  # pragma: no cover - source tree without an install
+        return None
+    return installed if installed != basic_memory.__version__ else None
+
+
 def version_callback(value: bool) -> None:
     """Show version and exit."""
     if value:  # pragma: no cover
         import basic_memory
 
         typer.echo(f"Basic Memory version: {basic_memory.__version__}")
+        # Only when it adds information. A stale-looking release number with no hint that
+        # a different build is installed is worse than no number: someone verifying that
+        # a patched build is live reads a confident, wrong answer.
+        build = installed_build_version()
+        if build:
+            typer.echo(f"Installed build: {build}")
         raise typer.Exit()
 
 
